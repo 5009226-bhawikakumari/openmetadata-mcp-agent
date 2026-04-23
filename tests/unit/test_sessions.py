@@ -121,7 +121,9 @@ async def test_confirm_reject_does_not_call_mcp() -> None:
         "copilot.services.sessions.enqueue_writeback_for_state",
         new_callable=AsyncMock,
     ) as m:
-        out = await confirm_chat_proposal(sid, prop.proposal_id, False, request_id=uuid4())
+        out = await confirm_chat_proposal(
+            sid, prop.proposal_id, False, request_id=uuid4()
+        )
 
     m.assert_not_awaited()
     assert out["audit_log"] == []
