@@ -105,33 +105,51 @@ class TestClassifyIntent:
 class TestSelectTools:
     """Tests for the select_tools node."""
 
-    @patch("copilot.services.agent.openai_client.call_chat_json", new_callable=AsyncMock)
-    async def test_returns_tool_proposals_on_success(
-        self, mock_llm: AsyncMock, base_state: AgentState
-    ) -> None:
-        """LLM successfully selects tools and populates proposals."""
+    async def test_deterministic_route_skips_llm(self, base_state: AgentState) -> None:
+        """Common search queries are routed deterministically without an LLM call."""
         from copilot.services.agent import select_tools
 
-        mock_llm.return_value = {
-            "tools": [{"name": "search_metadata", "arguments": {"query": "test"}}],
-            "rationale": "search to find tables",
-        }
+        # "Show me all customer tables" is handled by the NL router fast-path
         result = await select_tools(base_state)
 
         proposals = result["tool_proposals"]
         assert len(proposals) == 1
         assert proposals[0]["name"] == "search_metadata"
-        assert proposals[0]["arguments"] == {"query": "test"}
-        assert proposals[0]["rationale"] == "search to find tables"
+        assert proposals[0]["arguments"]["query"] == "Show me all customer tables"
+
+    @patch("copilot.services.agent.openai_client.call_chat_json", new_callable=AsyncMock)
+    async def test_llm_fallback_on_ambiguous_query(
+        self, mock_llm: AsyncMock, base_state: AgentState
+    ) -> None:
+        """Queries that the router cannot handle fall through to the LLM."""
+        from copilot.services.agent import select_tools
+
+        # Glossary intent has no deterministic route → LLM tool selection
+        base_state["user_message"] = "Define term X for the business glossary"
+        base_state["intent"] = "glossary"
+
+        mock_llm.return_value = {
+            "tools": [{"name": "create_glossary_term", "arguments": {"name": "Revenue"}}],
+            "rationale": "user asked for glossary",
+        }
+        result = await select_tools(base_state)
+
+        proposals = result["tool_proposals"]
+        assert len(proposals) == 1
+        assert proposals[0]["name"] == "create_glossary_term"
+        mock_llm.assert_called_once()
 
     @patch("copilot.services.agent.openai_client.call_chat_json", new_callable=AsyncMock)
     async def test_returns_empty_proposals_on_llm_failure(
         self, mock_llm: AsyncMock, base_state: AgentState
     ) -> None:
-        """LLM failure results in empty proposals but does not crash."""
+        """LLM failure on ambiguous query results in empty proposals."""
         from copilot.middleware.error_envelope import LlmUnavailable
         from copilot.services.agent import select_tools
 
+        # Glossary intent falls through to LLM; simulate LLM failure
+        base_state["user_message"] = "Define term X for the business glossary"
+        base_state["intent"] = "glossary"
         mock_llm.side_effect = LlmUnavailable("timeout")
 
         result = await select_tools(base_state)

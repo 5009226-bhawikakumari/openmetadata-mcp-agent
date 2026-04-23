@@ -54,6 +54,7 @@ from copilot.models.chat import risk_level_for
 from copilot.models.governance_state import GovernanceState
 from copilot.observability import get_logger
 from copilot.services import governance_store
+from copilot.services.nl_router import route_query
 from copilot.services.sessions import set_pending
 from copilot.services.tool_audit import redact_tool_arguments, summarize_tool_result
 
@@ -279,7 +280,11 @@ def _auto_classification_proposals() -> list[dict[str, Any]]:
 
 
 async def select_tools(state: AgentState) -> AgentState:
-    """Node 2: Use LLM to select which MCP tools to call with what arguments.
+    """Node 2: Select tools — deterministic fast-path first, LLM fallback second.
+
+    Per NLQueryEngine.md: common query patterns (search, details, lineage)
+    are routed deterministically via ``nl_router.route_query`` to avoid
+    unnecessary LLM calls.  Only ambiguous queries fall through to the LLM.
 
     Args:
         state: Current state with ``intent`` and ``user_message``.
@@ -294,11 +299,31 @@ async def select_tools(state: AgentState) -> AgentState:
         state["tool_proposals"] = proposals
         log.info(
             "agent.select_tools.classify_chain",
+            request_id=state["request_id"],
             tool_count=len(proposals),
             tools=[p["name"] for p in proposals],
         )
         return state
 
+    # --- Fast path: deterministic routing ---
+    route = route_query(state["user_message"], intent=state.get("intent"))
+    if route is not None:
+        state["tool_proposals"] = [
+            {
+                "name": route.tool_name,
+                "arguments": route.arguments,
+                "rationale": route.rationale,
+            }
+        ]
+        log.info(
+            "agent.select_tools.routed",
+            request_id=state["request_id"],
+            tool=route.tool_name,
+            rationale=route.rationale,
+        )
+        return state
+
+    # --- Slow path: LLM-based tool selection ---
     intent_hint = INTENT_DESCRIPTIONS.get(state["intent"] or "search", "")
 
     try:
@@ -708,7 +733,7 @@ def _should_execute(state: AgentState) -> Literal["execute_tool", "format_respon
     return "format_response"
 
 
-def build_graph() -> StateGraph:
+def build_graph() -> Any:
     """Build the LangGraph state machine for one chat turn.
 
     Returns:
