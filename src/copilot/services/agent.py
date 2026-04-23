@@ -251,12 +251,26 @@ def _auto_classification_proposals() -> list[dict[str, Any]]:
             "arguments": {
                 "entityType": "table",
                 "entityFqn": _DEMO_TABLE_FQN,
-                "approved_tags": [f"{_DEMO_TABLE_FQN}.{column}:PII.Sensitive" for column in _DEMO_PII_COLUMNS],
+                "approved_tags": [
+                    f"{_DEMO_TABLE_FQN}.{column}:PII.Sensitive" for column in _DEMO_PII_COLUMNS
+                ],
                 # Batch patch proposal for the three PII spot-check columns in seed/customer_db.json.
                 "patch": [
-                    {"op": "add", "path": "/columns/3/tags/-", "value": {"tagFQN": "PII.Sensitive"}},
-                    {"op": "add", "path": "/columns/4/tags/-", "value": {"tagFQN": "PII.Sensitive"}},
-                    {"op": "add", "path": "/columns/5/tags/-", "value": {"tagFQN": "PII.Sensitive"}},
+                    {
+                        "op": "add",
+                        "path": "/columns/3/tags/-",
+                        "value": {"tagFQN": "PII.Sensitive"},
+                    },
+                    {
+                        "op": "add",
+                        "path": "/columns/4/tags/-",
+                        "value": {"tagFQN": "PII.Sensitive"},
+                    },
+                    {
+                        "op": "add",
+                        "path": "/columns/5/tags/-",
+                        "value": {"tagFQN": "PII.Sensitive"},
+                    },
                 ],
             },
             "rationale": "Propose batch PII tagging for email/phone/ssn via HITL gate.",
@@ -599,7 +613,7 @@ async def format_response(state: AgentState) -> AgentState:
 
     # Build context for the formatter
     context_parts = [f"User question: {state['user_message']}"]
-    intent = state.get('intent', 'unknown')
+    intent = state.get("intent", "unknown")
     context_parts.append(f"Classified intent: {intent}")
 
     if state.get("evidence_gap"):
@@ -638,12 +652,15 @@ async def format_response(state: AgentState) -> AgentState:
     # Similarity scoring
     candidate_fqns = []
     for proposal in state.get("tool_proposals", []) + ([pending] if pending else []):
-        fqn = _extract_entity_fqn(proposal.get("arguments", {}) if isinstance(proposal, dict) else proposal.arguments)
+        fqn = _extract_entity_fqn(
+            proposal.get("arguments", {}) if isinstance(proposal, dict) else proposal.arguments
+        )
         if fqn:
             candidate_fqns.append(fqn)
 
     if candidate_fqns:
         from copilot.services.similarity import compute_similarity
+
         approved_fqns = await governance_store.get_approved_fqns()
         for fqn in candidate_fqns:
             score = compute_similarity(fqn, approved_fqns)
