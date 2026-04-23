@@ -91,6 +91,8 @@ User submits a natural-language message. Agent runs intent classification → to
 }
 ```
 
+**As implemented (P2-19 / #75)**: `pending_confirmation` is the JSON serialization of the full `ToolCallProposal` (includes `arguments`, `request_id`, `proposed_at`, `rationale`, etc.). The UI-oriented `summary` and `preview_diff` fields above are aspirational for a richer client; the server does not synthesize them separately yet.
+
 **Response 422 — validation_failed**: request body shape invalid.
 
 **Response 422 — tool_not_allowlisted**: LLM proposed a tool outside the 13-tool allowlist (logged as security event).
@@ -287,8 +289,10 @@ Returns the latest governance drift scan results. The drift worker runs in the F
 - **Content-Type**: `application/json` for all JSON requests/responses.
 - **Time format**: ISO 8601 with timezone (`2026-04-26T14:30:00.000+05:30`). Server side produces; never accept naive timestamps.
 - **UUIDs**: v4, lowercase, hyphenated.
+- **UI session continuity**: browser clients persist `session_id` from each `/chat` response and send it back on subsequent `/chat` requests.
 - **Markdown in `response`**: limited subset — headings, bold/italic, lists, tables, inline code. NO raw HTML, NO `<script>`, NO `javascript:` URLs (UI renders with `react-markdown` + `rehype-sanitize`).
 - **`details` in error envelope**: must be a flat object with safe types (string, number, bool, array of those). NEVER a Pydantic model dump that could include secrets.
+- **Error UX**: clients must surface envelope `code` + canonical `message`; never render raw exception strings or stack traces.
 
 ## What this contract is NOT
 
