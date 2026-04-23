@@ -23,6 +23,8 @@ from fastapi.testclient import TestClient
 
 from copilot.middleware.error_envelope import ConfirmationExpired, ProposalNotFound
 from copilot.models import RiskLevel, ToolCallProposal, ToolName
+from copilot.models.governance_state import GovernanceState
+from copilot.services.governance_store import get_or_create, reset_governance_store_for_tests
 from copilot.services.sessions import (
     cancel_chat_session,
     confirm_chat_proposal,
@@ -32,11 +34,15 @@ from copilot.services.sessions import (
 )
 
 
+from typing import AsyncGenerator
+
 @pytest.fixture(autouse=True)
-async def _clean_session_store() -> None:
+async def _clean_session_store() -> AsyncGenerator[None, None]:
     await reset_session_store_for_tests()
+    await reset_governance_store_for_tests()
     yield
     await reset_session_store_for_tests()
+    await reset_governance_store_for_tests()
 
 
 def _write_proposal(
@@ -73,6 +79,7 @@ async def test_confirm_accept_happy_path_enqueues_writeback_and_clears_store() -
         out = await confirm_chat_proposal(sid, pid, True, request_id=uuid4())
 
     m.assert_awaited_once()
+    assert m.await_args is not None
     call_kwargs = m.await_args.kwargs
     assert call_kwargs["entity_fqn"] == "db.schema.t"
     assert call_kwargs["governance_state"].value == "approved"
@@ -81,6 +88,8 @@ async def test_confirm_accept_happy_path_enqueues_writeback_and_clears_store() -
     assert len(out["audit_log"]) == 1
     assert out["audit_log"][0]["confirmed_by_user"] is True
     assert out["audit_log"][0]["success"] is True
+    row = await get_or_create("db.schema.t")
+    assert row.state == GovernanceState.APPROVED
 
     with pytest.raises(ProposalNotFound):
         await confirm_chat_proposal(sid, pid, True, request_id=uuid4())
