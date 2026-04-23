@@ -733,7 +733,7 @@ def _should_execute(state: AgentState) -> Literal["execute_tool", "format_respon
     return "format_response"
 
 
-def build_graph() -> StateGraph:
+def build_graph() -> Any:
     """Build the LangGraph state machine for one chat turn.
 
     Returns:
