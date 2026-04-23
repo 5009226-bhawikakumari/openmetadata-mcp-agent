@@ -155,7 +155,9 @@ class TestSelectTools:
             "patch_entity",
         ]
         assert proposals[0]["arguments"]["queryFilter"] == "service:customer_db"
-        assert proposals[1]["arguments"]["entityFqn"] == "sample_mysql.default.customer_db.customers"
+        assert (
+            proposals[1]["arguments"]["entityFqn"] == "sample_mysql.default.customer_db.customers"
+        )
         assert len(proposals[2]["arguments"]["patch"]) == 3
         assert proposals[2]["arguments"]["approved_tags"] == [
             "sample_mysql.default.customer_db.customers.email:PII.Sensitive",
@@ -218,14 +220,18 @@ class TestValidateProposal:
         await validate_proposal(base_state)
         assert mock_transition.await_count == 1
 
-    async def test_sets_evidence_gap_for_classify_without_proposals(self, base_state: AgentState) -> None:
+    async def test_sets_evidence_gap_for_classify_without_proposals(
+        self, base_state: AgentState
+    ) -> None:
         """Sets evidence_gap when intent is classify and no valid proposals remain."""
         base_state["intent"] = "classify"
         base_state["tool_proposals"] = []
         result = await validate_proposal(base_state)
         assert result.get("evidence_gap") is True
 
-    async def test_does_not_set_evidence_gap_if_proposals_exist(self, base_state: AgentState) -> None:
+    async def test_does_not_set_evidence_gap_if_proposals_exist(
+        self, base_state: AgentState
+    ) -> None:
         """Does not set evidence_gap if proposals are successfully validated."""
         base_state["intent"] = "classify"
         base_state["tool_proposals"] = [
@@ -435,8 +441,10 @@ class TestFormatResponse:
         mock_llm.return_value = {"content": "ok", "tokens_prompt": 1, "tokens_completion": 1}
         base_state["evidence_gap"] = True
         await format_response(base_state)
-        
-        call_kwargs = mock_llm.call_args.kwargs if mock_llm.call_args.kwargs else mock_llm.call_args[1]
+
+        call_kwargs = (
+            mock_llm.call_args.kwargs if mock_llm.call_args.kwargs else mock_llm.call_args[1]
+        )
         messages = call_kwargs.get("messages") or mock_llm.call_args[0][0]
         system_call_content = messages[1]["content"]
         assert "admit humility" in system_call_content
@@ -450,8 +458,10 @@ class TestFormatResponse:
         base_state["intent"] = "classify"
         base_state["tool_results"] = [{"downstreamEdges": []}]
         await format_response(base_state)
-        
-        call_kwargs = mock_llm.call_args.kwargs if mock_llm.call_args.kwargs else mock_llm.call_args[1]
+
+        call_kwargs = (
+            mock_llm.call_args.kwargs if mock_llm.call_args.kwargs else mock_llm.call_args[1]
+        )
         messages = call_kwargs.get("messages") or mock_llm.call_args[0][0]
         system_call_content = messages[1]["content"]
         assert "Causal downstream impact detected" in system_call_content
@@ -466,8 +476,10 @@ class TestFormatResponse:
         mock_llm.return_value = {"content": "ok", "tokens_prompt": 1, "tokens_completion": 1}
         base_state["tool_proposals"] = [{"arguments": {"fqn": "test.db.schema.table"}}]
         await format_response(base_state)
-        
-        call_kwargs = mock_llm.call_args.kwargs if mock_llm.call_args.kwargs else mock_llm.call_args[1]
+
+        call_kwargs = (
+            mock_llm.call_args.kwargs if mock_llm.call_args.kwargs else mock_llm.call_args[1]
+        )
         messages = call_kwargs.get("messages") or mock_llm.call_args[0][0]
         system_call_content = messages[1]["content"]
         assert "Opinionated Governance Assistant:" in system_call_content
