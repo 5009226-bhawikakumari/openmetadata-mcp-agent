@@ -17,10 +17,10 @@ Covers:
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from copilot.models.chat import RiskLevel, ToolCallProposal, ToolName
@@ -44,7 +44,11 @@ def _make_proposal(
     return ToolCallProposal(
         request_id=uuid4(),
         tool_name=tool,
-        arguments={"entityFQN": "customer_db.public.users", "op": "add_tag", "tag": "PII.Sensitive"},
+        arguments={
+            "entityFQN": "customer_db.public.users",
+            "op": "add_tag",
+            "tag": "PII.Sensitive",
+        },
         risk_level=risk,
         rationale="Apply PII tag to users table",
         expires_at=now - timedelta(minutes=1) if expired else now + timedelta(minutes=5),

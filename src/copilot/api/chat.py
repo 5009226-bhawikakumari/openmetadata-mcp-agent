@@ -32,7 +32,7 @@ from pydantic import BaseModel, Field
 
 from copilot.clients import om_mcp
 from copilot.middleware.error_envelope import _envelope
-from copilot.models.chat import ErrorCode
+from copilot.models.chat import ErrorCode, ToolName
 from copilot.observability import get_logger
 from copilot.services import session_store
 from copilot.services.agent import run_chat_turn
@@ -118,9 +118,16 @@ async def post_chat_confirm(request: Request, body: ChatConfirmRequest) -> JSONR
     )
     start = datetime.now(UTC)
     try:
-        result = await asyncio.to_thread(
-            om_mcp.call_tool, str(proposal.tool_name), proposal.arguments
-        )
+        if proposal.tool_name == ToolName.GITHUB_CREATE_ISSUE:
+            from copilot.clients import github_mcp
+
+            _ = await asyncio.to_thread(
+                github_mcp.call_tool, str(proposal.tool_name), proposal.arguments
+            )
+        else:
+            _ = await asyncio.to_thread(
+                om_mcp.call_tool, str(proposal.tool_name), proposal.arguments
+            )
         end = datetime.now(UTC)
         duration_ms = int((end - start).total_seconds() * 1000)
         return JSONResponse(
