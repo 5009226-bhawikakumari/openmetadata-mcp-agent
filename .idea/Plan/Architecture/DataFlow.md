@@ -58,3 +58,38 @@ sequenceDiagram
 
     A-->>U: "Done. 12 columns tagged."
 ```
+
+## Drift Detection Flow
+
+```mermaid
+sequenceDiagram
+    participant LP as Lifespan Poll Loop
+    participant DS as Drift Service
+    participant MCP as OM MCP
+    participant OM as OpenMetadata
+    participant API as GET /governance/drift
+    participant U as User/Demo
+
+    loop Every N seconds
+        LP->>DS: run_drift_scan()
+        DS->>MCP: search_metadata(query=*, limit=100)
+        MCP->>OM: GET /api/v1/search/query
+        OM-->>MCP: Search results
+        MCP-->>DS: Entity list
+
+        loop For each entity
+            DS->>MCP: get_entity_details(fqn)
+            MCP->>OM: GET /api/v1/tables/{id}
+            OM-->>MCP: Entity details
+            MCP-->>DS: Entity JSON
+            DS->>DS: hash + tag compare vs baseline
+        end
+
+        DS-->>LP: DriftSnapshot (cached)
+    end
+
+    U->>API: GET /api/v1/governance/drift
+    API->>DS: get_latest_snapshot()
+    DS-->>API: DriftSnapshot
+    API-->>U: JSON {drift, scanned_at, ...}
+```
