@@ -91,6 +91,8 @@ User submits a natural-language message. Agent runs intent classification → to
 }
 ```
 
+**As implemented (P2-19 / #75)**: `pending_confirmation` is the JSON serialization of the full `ToolCallProposal` (includes `arguments`, `request_id`, `proposed_at`, `rationale`, etc.). The UI-oriented `summary` and `preview_diff` fields above are aspirational for a richer client; the server does not synthesize them separately yet.
+
 **Response 422 — validation_failed**: request body shape invalid.
 
 **Response 422 — tool_not_allowlisted**: LLM proposed a tool outside the 13-tool allowlist (logged as security event).
@@ -237,13 +239,54 @@ Prometheus text-format metrics endpoint. Always 200 (text/plain).
 
 ---
 
+## Planned endpoints (pre-implementation contract)
+
+These routes are **specified before code** so agents and reviewers do not silently diverge from intent. Implement behind the same `/api/v1` prefix and error envelope as existing routes.
+
+### `GET /api/v1/governance/drift`
+
+**Purpose**: List entities whose governance FSM is in **`drift_detected`** (and optional remediation hints), populated by the drift worker described in [FeatureDev/GovernanceEngine.md](../FeatureDev/GovernanceEngine.md).
+
+**Auth (v1)**: Same as other `/api/v1/*` routes — none; loopback-only deployment per Threat Model.
+
+**Response 200**:
+
+```json
+{
+  "request_id": "uuid-v4",
+  "ts": "2026-04-26T14:30:00.000+05:30",
+  "entities": [
+    {
+      "fqn": "service.database.schema.table_name",
+      "governance_state": "drift_detected",
+      "signals": ["lineage_changed", "tags_removed:PII.Sensitive"],
+      "detected_at": "2026-04-26T14:25:00.000+05:30"
+    }
+  ],
+  "count": 1
+}
+```
+
+| Field      | Type     | Notes                                                                                        |
+| ---------- | -------- | -------------------------------------------------------------------------------------------- |
+| `entities` | array    | Empty array when no drift; stable sort by `fqn`.                                             |
+| `signals`  | string[] | Machine-readable tokens; optional human summary may be added later without breaking clients. |
+
+**Response 503 — om_unavailable**: drift job could not refresh OM view (circuit breaker / timeout).
+
+**Response 500 — internal_error**: aggregation failed after partial reads (log + alert).
+
+---
+
 ## Conventions
 
 - **Content-Type**: `application/json` for all JSON requests/responses.
 - **Time format**: ISO 8601 with timezone (`2026-04-26T14:30:00.000+05:30`). Server side produces; never accept naive timestamps.
 - **UUIDs**: v4, lowercase, hyphenated.
+- **UI session continuity**: browser clients persist `session_id` from each `/chat` response and send it back on subsequent `/chat` requests.
 - **Markdown in `response`**: limited subset — headings, bold/italic, lists, tables, inline code. NO raw HTML, NO `<script>`, NO `javascript:` URLs (UI renders with `react-markdown` + `rehype-sanitize`).
 - **`details` in error envelope**: must be a flat object with safe types (string, number, bool, array of those). NEVER a Pydantic model dump that could include secrets.
+- **Error UX**: clients must surface envelope `code` + canonical `message`; never render raw exception strings or stack traces.
 
 ## What this contract is NOT
 

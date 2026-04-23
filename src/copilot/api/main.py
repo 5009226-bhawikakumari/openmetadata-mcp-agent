@@ -16,8 +16,8 @@ Per .idea/Plan/Architecture/APIContract.md:
   - GET  /api/v1/healthz   functional in Phase 1 (boots without dependencies)
   - GET  /api/v1/metrics   functional in Phase 1 (Prometheus text format)
   - POST /api/v1/chat      functional in Phase 2 via the LangGraph agent
-  - POST /api/v1/chat/confirm  stubbed until P2-12
-  - POST /api/v1/chat/cancel   no-op cancel until sessions are stateful
+  - POST /api/v1/chat/confirm  P2-19 session store + OM MCP execute on accept
+  - POST /api/v1/chat/cancel   clears pending session state (P2-19)
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from copilot import __version__
 from copilot.api import chat as chat_routes
-from copilot.config import get_settings
+from copilot.config import assert_runtime_env_ready, get_settings
 from copilot.middleware import (
     RequestIdMiddleware,
     build_limiter,
@@ -50,6 +50,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     configure_observability()
     log = get_logger(__name__)
     settings = get_settings()
+    assert_runtime_env_ready(settings)
     log.info(
         "app.startup",
         version=__version__,
@@ -77,7 +78,10 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
         allow_credentials=False,
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type", "X-Request-Id"],

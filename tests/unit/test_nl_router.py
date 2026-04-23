@@ -39,7 +39,6 @@ import pytest
 
 from copilot.services.nl_router import ToolRoute, route_query
 
-
 # ---------------------------------------------------------------------------
 # Search → search_metadata
 # ---------------------------------------------------------------------------
@@ -234,9 +233,7 @@ class TestEdgeCases:
 
     def test_classify_intent_falls_through(self) -> None:
         """Classify intent is not handled by the router → returns None."""
-        result = route_query(
-            "Auto-classify PII columns in customer_db", intent="classify"
-        )
+        result = route_query("Auto-classify PII columns in customer_db", intent="classify")
         assert result is None
 
     def test_glossary_intent_falls_through(self) -> None:
