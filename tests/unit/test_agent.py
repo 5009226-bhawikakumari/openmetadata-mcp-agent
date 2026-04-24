@@ -501,7 +501,7 @@ class TestFormatResponse:
         messages = call_kwargs.get("messages") or mock_llm.call_args[0][0]
         system_call_content = messages[1]["content"]
         assert "Opinionated Governance Assistant:" in system_call_content
- 
+
     @patch("copilot.services.agent.openai_client.call_chat", new_callable=AsyncMock)
     async def test_injects_lineage_report_prompt(
         self, mock_llm: AsyncMock, base_state: AgentState
@@ -511,15 +511,14 @@ class TestFormatResponse:
         base_state["intent"] = "lineage"
         base_state["tool_results"] = [{"nodes": [], "edges": []}]
         await format_response(base_state)
- 
+
         call_kwargs = (
             mock_llm.call_args.kwargs if mock_llm.call_args.kwargs else mock_llm.call_args[1]
         )
         messages = call_kwargs.get("messages") or mock_llm.call_args[0][0]
-        # The instructions are in the user message (messages[1]) which is context_parts
-        system_call_content = messages[1]["content"]
-        assert "Lineage Impact Analysis rules" in system_call_content
-        assert "Tier 1 assets" in system_call_content
+        user_context = messages[1]["content"]
+        assert "Lineage Impact Analysis rules" in user_context
+        assert "Tier 1 assets" in user_context
 
 
 class TestRunChatTurn:

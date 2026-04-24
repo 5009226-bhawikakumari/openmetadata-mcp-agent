@@ -34,7 +34,6 @@ User: "Show me the upstream of the revenue_dashboard"
    4. pricing_rules (Snowflake) → via products
 
    ⚠️ Cross-service dependency: pricing_rules is in Snowflake while others are in BigQuery."
-```
 
 ## MCP Tools Used
 
