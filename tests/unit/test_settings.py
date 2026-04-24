@@ -4,6 +4,12 @@
 #  a copy of the License at
 #
 #  http://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 """Verify SC-1 (host=127.0.0.1) and SC-2 (SecretStr usage) from ThreatModel.md."""
 
 from __future__ import annotations
@@ -11,7 +17,11 @@ from __future__ import annotations
 import pytest
 from pydantic import SecretStr
 
-from copilot.config.settings import Settings
+from copilot.config.settings import Settings, assert_runtime_env_ready
+
+# Non-JWT-shaped value: scanners (e.g. GitGuardian) flag eyJ... three-segment tokens in PRs.
+# Runtime checks only need a non-placeholder secret (see _is_placeholder_secret).
+_UNIT_TEST_OM_SDK_TOKEN_OK = "copilot-unit-test-om-bot-credential-not-a-jwt-0123456789ab"
 
 
 class TestSC1LoopbackBindOnly:
@@ -48,9 +58,93 @@ class TestResilienceKnobs:
     def test_om_timeout_default(self) -> None:
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.om_timeout_seconds == pytest.approx(5.0)
-        assert s.om_max_retries == 3
+
+    def test_om_mcp_http_path_default(self) -> None:
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.om_mcp_http_path == "/mcp"
+
+    def test_om_mcp_http_path_strips_and_prefixes_slash(self) -> None:
+        s = Settings(_env_file=None, om_mcp_http_path="api/v1/mcp")  # type: ignore[call-arg]
+        assert s.om_mcp_http_path == "/api/v1/mcp"
 
     def test_openai_timeout_default(self) -> None:
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.openai_timeout_seconds == pytest.approx(8.0)
         assert s.openai_max_retries == 2
+
+
+class TestRuntimeEnvValidation:
+    """Startup guard: reject .env.example placeholders when not under pytest."""
+
+    def test_github_token_empty_string_becomes_none(self) -> None:
+        s = Settings(_env_file=None, github_token="")  # type: ignore[call-arg]
+        assert s.github_token is None
+
+    def test_assert_runtime_rejects_om_placeholder(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("PYTEST_VERSION", raising=False)
+        monkeypatch.delenv("COPILOT_SKIP_ENV_VALIDATION", raising=False)
+        s = Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            ai_sdk_host="http://localhost:8585",
+            ai_sdk_token="paste-your-bot-jwt-here",
+            openai_api_key="sk-abcdefghijklmnopqrstuvwxyz0123456789",
+        )
+        with pytest.raises(RuntimeError, match="AI_SDK_TOKEN"):
+            assert_runtime_env_ready(s)
+
+    def test_assert_runtime_rejects_openai_placeholder(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("PYTEST_VERSION", raising=False)
+        monkeypatch.delenv("COPILOT_SKIP_ENV_VALIDATION", raising=False)
+        s = Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            ai_sdk_host="http://localhost:8585",
+            ai_sdk_token=_UNIT_TEST_OM_SDK_TOKEN_OK,
+            openai_api_key="sk-paste-your-key-here",
+        )
+        with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
+            assert_runtime_env_ready(s)
+
+    def test_assert_runtime_skipped_under_pytest(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("PYTEST_VERSION", "8.0.0")
+        s = Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            ai_sdk_host="http://localhost:8585",
+            ai_sdk_token="paste-your-bot-jwt-here",
+            openai_api_key="sk-paste-your-key-here",
+        )
+        assert_runtime_env_ready(s)  # does not raise
+
+    def test_github_template_pat_becomes_none(self) -> None:
+        s = Settings(_env_file=None, github_token="ghp_your_fine_grained_pat_here")  # type: ignore[call-arg]
+        assert s.github_token is None
+
+    def test_assert_runtime_ok_when_github_was_template_pat(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("PYTEST_VERSION", raising=False)
+        monkeypatch.delenv("COPILOT_SKIP_ENV_VALIDATION", raising=False)
+        s = Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            ai_sdk_host="http://localhost:8585",
+            ai_sdk_token=_UNIT_TEST_OM_SDK_TOKEN_OK,
+            openai_api_key="sk-abcdefghijklmnopqrstuvwxyz0123456789",
+            github_token="ghp_your_fine_grained_pat_here",
+        )
+        assert_runtime_env_ready(s)
+
+    def test_assert_runtime_accepts_utf8_bom_and_wrapping_quotes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Windows editors sometimes save UTF-8 BOM; users sometimes wrap values in quotes."""
+        monkeypatch.delenv("PYTEST_VERSION", raising=False)
+        monkeypatch.delenv("COPILOT_SKIP_ENV_VALIDATION", raising=False)
+        wrapped = f"'{_UNIT_TEST_OM_SDK_TOKEN_OK}'"
+        s = Settings(
+            _env_file=None,  # type: ignore[call-arg]
+            ai_sdk_host="http://localhost:8585",
+            ai_sdk_token=wrapped,
+            openai_api_key="\ufeffsk-abcdefghijklmnopqrstuvwxyz0123456789",
+        )
+        assert_runtime_env_ready(s)
